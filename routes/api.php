@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Sensors\TemperatureReadingController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::prefix('sensors')->as('sensors:')->group(function(){
+    Route::post('/receive', [TemperatureReadingController::class, 'receiveDataFromSensor'])->name('receivefromsensor');
+    Route::get('/read', [TemperatureReadingController::class, 'checkDataFromSensor'])->name('checkfromsensor');
 });
