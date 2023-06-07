@@ -6,9 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\TemperatureReadings;
 use App\Models\Sensor\TemperatureReading;
 use App\Models\Sensor\TemperatureSensor;
-use App\Models\TemperatureSensor\Sensor;
-use App\Models\TemperatureSensor\SensorReading;
-use http\Env\Response;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +14,9 @@ use Illuminate\Support\Facades\Validator;
 
 class TemperatureReadingController extends Controller
 {
+    public array $reverseType = [1 => 2, 2 => 1];
+    public array $temperatureType = [1 => 'Celsius', 2 => 'Fahrenheit'];
+
     /**
      * Display a listing of the resource.
      */
@@ -75,7 +75,7 @@ class TemperatureReadingController extends Controller
 
         $sensors = TemperatureSensor::all();
 
-        if(empty($sensors)){
+        if($sensors->isEmpty()){
             return response()
                 ->json([
                     'message' => 'Sensor not found!'
@@ -149,42 +149,98 @@ class TemperatureReadingController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Middle temperature from all sensors, in submitted days range.
      */
-    public function create()
-    {
-        //
+    public function getAvarageFromAllSensors(Request $request): string|bool{
+        $input = $request->all();
+
+        $isValid = Validator::make($input,[
+            'date_from' => 'required|date',
+            'date_to' => 'required|date'
+        ]);
+
+        if($isValid->fails()){
+            return $isValid->errors()->first();
+        }
+
+        $validated = $isValid->validated();
+
+        $readingType = isset($input['reading_type']) ? (int)$input['reading_type'] : 1;
+
+        $sensorReadings = TemperatureReading::whereBetween('reading_dt',[$validated['date_from'], $validated['date_to']])
+            ->get();
+
+        if ($sensorReadings->isEmpty()) {
+            return 'No data found!';
+        }
+
+        return $this->calcTemperatureAVG($sensorReadings, $this->reverseType[$readingType], $readingType);
     }
 
     /**
-     * Display the specified resource.
+     * Middle temperature for a particular sensor readings, in one-hour range.
      */
-    public function show(string $id)
-    {
-        //
+    public function getAverageFromSensor(Request $request): float|bool|string{
+        $input = $request->all();
+
+        $isValid = Validator::make($input,[
+            'sensor_uuid' => 'required|string'
+        ]);
+
+        if($isValid->fails()){
+            return $isValid->errors()->first();
+        }
+
+        $validated = $isValid->validated();
+
+        $readingType = isset($input['reading_type']) ? (int)$input['reading_type'] : 1;
+
+        $sensor = TemperatureSensor::select('id')
+            ->where('sensor_uuid','=',$validated['sensor_uuid'])
+            ->first();
+
+        if(empty($sensor->id)){
+            return 'Sensor not found!';
+        }
+
+        $sensorReadings = TemperatureReading::where('sensor_id', '=', $sensor->id)
+            ->whereRaw('`reading_dt` >= datetime(\'now\', \'-1 Hour\')')
+            ->get();
+
+        if ($sensorReadings->isEmpty()) {
+            return false;
+        }
+
+        return $this->calcTemperatureAVG($sensorReadings, $this->reverseType[$readingType], $readingType);
     }
 
     /**
-     * Show the form for editing the specified resource.
+     * Calculate average temperature.
      */
-    public function edit(string $id)
-    {
-        //
+    public function calcTemperatureAVG($sensorReadings, int $reverseType, int $readingType): string|false {
+
+        foreach ($sensorReadings as $readingItem) {
+            $temperature = $readingItem['temperature'];
+
+            if ($readingItem['reading_type'] === $reverseType) {
+                $temperature = $this->convertTemperature($readingItem['temperature'], $readingItem['reading_type']);
+            }
+
+            $avgArr[] = (float)$temperature;
+        }
+
+        $avgTemperature = number_format(array_sum($avgArr) / count($avgArr), 3, '.');
+
+        return $avgTemperature . ' ' . $this->temperatureType[$readingType];
     }
 
     /**
-     * Update the specified resource in storage.
+     * Convert type: 1 - From Celsius to Fahrenheit, 2 - From Fahrenheit to Celsius
      */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+    public function convertTemperature(float $temperature, int $type): float {
+        return match ($type) {
+            2 => round((($temperature - 32) * 5) / 9, 3),
+            default => round((($temperature * 9 / 5) + 32), 3),
+        };
     }
 }
