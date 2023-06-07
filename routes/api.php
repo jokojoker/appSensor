@@ -17,5 +17,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('sensors')->as('sensors:')->group(function(){
     Route::post('/receive', [TemperatureReadingController::class, 'receiveDataFromSensor'])->name('receivefromsensor');
-
+    Route::get('/read', [TemperatureReadingController::class, 'checkDataFromSensor'])->name('checkfromsensor');
 });

@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\TemperatureReadings;
 use App\Models\Sensor\TemperatureReading;
 use App\Models\Sensor\TemperatureSensor;
+use App\Models\TemperatureSensor\Sensor;
 use App\Models\TemperatureSensor\SensorReading;
+use http\Env\Response;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 
 class TemperatureReadingController extends Controller
@@ -63,6 +66,73 @@ class TemperatureReadingController extends Controller
         return response()->json([
             'message' => new TemperatureReadings($sensorReading)
         ]);
+    }
+
+    /**
+     * Receive data from external call to API.
+     */
+    public function checkDataFromSensor(): jsonResponse{
+
+        $sensors = TemperatureSensor::all();
+
+        if(empty($sensors)){
+            return response()
+                ->json([
+                    'message' => 'Sensor not found!'
+                ]);
+        }
+
+        foreach ($sensors as $sensorItem){
+            $wsProtocol = 'http://';
+            $wsMethod = '/data';
+            //$endPoint = $wsProtocol.$sensorItem->ip_address.$wsMethod;
+            $endPoint = 'http://app.sensor.lv/data';
+
+            $responseData = Http::get($endPoint);
+
+            if($responseData->status() == 200){
+                $dataCSV = $responseData->body();
+                $dataArr = explode(',',$dataCSV);
+                $inputArr = ['reading_id_from_sensor' => $dataArr[0], 'temperature' => $dataArr[1]];
+
+                $isValid = Validator::make($inputArr,[
+                    'reading_id_from_sensor' => 'required|string',
+                    'temperature' => 'required|decimal:2'
+                ]);
+
+                if($isValid->fails()){
+                    return response()
+                        ->json([
+                            'message' => $isValid->errors()
+                        ]);
+                }
+
+                $validated = $isValid->validated();
+
+                $sensorReadingExist = TemperatureReading::where('reading_id_from_sensor','=',$validated['reading_id_from_sensor'])->count();
+
+                if($sensorReadingExist < 1) {
+                    $this->store([
+                        'sensor_id' => $sensorItem->id,
+                        'reading_id_from_sensor' => $validated['reading_id_from_sensor'],
+                        'temperature' => $validated['temperature'],
+                        'reading_type' => 1
+                    ]);
+                }
+            }
+        }
+
+        return response()
+            ->json([
+                'message' => 'Data saved!'
+            ]);
+    }
+
+    /**
+     * Faker for data generator on Call.
+     */
+    public function fakeSensorCSV(): string{
+        return rand(20000,29999).','.(rand(1000,19999)/100);
     }
 
     /**
