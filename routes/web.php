@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Sensors\TemperatureReadingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/',[TemperatureReadingController::class, 'index']);
+Route::get('data', [TemperatureReadingController::class, 'fakeSensorCSV']);
+Route::get('getavgfromall', [TemperatureReadingController::class, 'getAvarageFromAllSensors']);
+Route::get('getavgfromone', [TemperatureReadingController::class, 'getAverageFromSensor']);
+
